@@ -1366,3 +1366,57 @@ extern "C"{
     }
   }
 }
+
+// =====================================================================
+// Yonsei extension: seeded standalone entry (added 2026-05-01)
+// Original src_code_mutation seeds RNG from random_device (non-reproducible).
+// This variant takes explicit seed for deterministic dataset generation.
+//   seed     : explicit RNG seed
+//   mode_idx : -1 = random pick, 0..8 = specific mutator from _mutator_options
+// =====================================================================
+extern "C" {
+  void src_code_mutation_seeded(uint8_t *buf, size_t buf_size, char *pointer,
+                                unsigned long seed, int mode_idx) {
+    string data = (char *)buf;
+    if (data.length() > buf_size) {
+      data = data.substr(0, buf_size);
+    }
+    gotRewritten = false;
+    reWrittenStr.clear();
+    inCaseStmt = false;
+
+    GrayCCustomRandom::CreateInstance(seed, _mutator_options.size());
+    if (mode_idx >= 0 && mode_idx < (int)_mutator_options.size()) {
+      mutationChosen = _mutator_options[mode_idx];
+    } else {
+      mutationChosen = _mutator_options[GrayCCustomRandom::GetInstance()->rnd_dice()];
+    }
+    GrayCCustomRandom::DeleteInstance(seed);
+
+    GrayCCustomRandom::CreateInstance(seed, 6);
+    const vector<string> no_warning_flag = {
+      "--no-warnings", "-x", "c",
+      "-I/usr/local/include/",
+      "-I/usr/lib/gcc/x86_64-linux-gnu/11/include/",
+      "-I/usr/include/x86_64-linux-gnu/",
+      "-I/usr/include/",
+      "-I/usr/include/linux"
+    };
+    clang::tooling::runToolOnCodeWithArgs(std::make_unique<CodeMutatorsAction>(),
+                                          data, no_warning_flag);
+    GrayCCustomRandom::DeleteInstance(seed);
+
+    fprintf(stderr, "[bin2wrong] mutator=%s, seed=%lu, rewritten=%d\n",
+            mutationChosen.c_str(), seed, (int)gotRewritten);
+
+    if (gotRewritten) {
+      size_t reWrittenLen = reWrittenStr.length();
+      strncpy(pointer, reWrittenStr.c_str(), reWrittenLen);
+      pointer[reWrittenLen] = '\0';
+    } else {
+      size_t dataLen = data.length();
+      strncpy(pointer, data.c_str(), dataLen);
+      pointer[dataLen] = '\0';
+    }
+  }
+}
